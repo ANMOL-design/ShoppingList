@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:shoppinglist/data/categories.dart';
 import 'package:shoppinglist/models/category.dart';
+
+import 'package:http/http.dart' as http;
 import 'package:shoppinglist/models/grocery_item.dart';
 
 class NewItem extends StatefulWidget {
@@ -14,18 +18,47 @@ class NewItem extends StatefulWidget {
 
 class _NewItemState extends State<NewItem> {
   final _formKey = GlobalKey<FormState>();
+  var _isSending = false;
   var _enteredName = '';
   var _enteredQuantity = 1;
   var _selectedCategory = categories[Categories.vegetables]!;
 
-  void _saveItem() {
+  void _saveItem() async {
     // call the validator of from
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
-      // Sending back data using Navigation
+      setState(() {
+        _isSending = true;
+      });
+      // Sending POST request to Firebase using Https
+      // Creating a Backend URL
+      final url = Uri.https(
+          'shoppinglist-93576-default-rtdb.asia-southeast1.firebasedatabase.app',
+          'shopping-list.json');
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode(
+          {
+            'name': _enteredName,
+            'quantity': _enteredQuantity,
+            'category': _selectedCategory.title,
+          },
+        ),
+      );
+
+      final Map<String, dynamic> resp = json.decode(response.body);
+
+      // Checking that the context is still there and user don't
+      // to to any other screen during api calling
+      if (!context.mounted) {
+        return;
+      }
       Navigator.of(context).pop(
         GroceryItem(
-          id: DateTime.now().toString(),
+          id: resp['name'],
           name: _enteredName,
           quantity: _enteredQuantity,
           category: _selectedCategory,
@@ -129,17 +162,27 @@ class _NewItemState extends State<NewItem> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     TextButton(
-                      onPressed: () {
-                        // reset the value using from key
-                        _formKey.currentState!.reset();
-                      },
+                      onPressed: _isSending
+                          ? null
+                          : () {
+                              // reset the value using from key
+                              _formKey.currentState!.reset();
+                            },
                       child: const Text('Reset'),
                     ),
                     ElevatedButton(
-                      onPressed: () {
-                        _saveItem();
-                      },
-                      child: const Text('Add Item'),
+                      onPressed: _isSending
+                          ? null
+                          : () {
+                              _saveItem();
+                            },
+                      child: _isSending
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(),
+                            )
+                          : const Text('Add Item'),
                     ),
                   ],
                 )
